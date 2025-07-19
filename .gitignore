@@ -1,3 +1,6 @@
 myenv211
 .env
 document_portal.egg-info
+*.log
+__pycache__
+.vscode
