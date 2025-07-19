@@ -59,3 +59,18 @@ LLM Model ## groq(freely), openai(paid), gemini(15days free accesss), claude(pai
 Embedding model ## openai, hf, gemini
 
 vectordatabase ##inmemory ##ondisk ##cloudbased
+
+##GROQ API KEY LINK
+
+https://console.groq.com/keys
+https://console.groq.com/docs/overview
+
+GEMINI API KEY
+
+https://aistudio.google.com/apikey
+https://ai.google.dev/gemini-api/docs/models
+
+```
+to deploy the Package from setup.py
+```
+pip install -e .

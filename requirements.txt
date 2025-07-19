@@ -4,5 +4,7 @@ python-dotenv
 langchain_groq
 langchain_Openai
 ipykernel
+langchain_google_genai
 
 -e .
+
