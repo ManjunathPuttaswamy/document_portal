@@ -5,6 +5,9 @@ langchain_groq
 langchain_Openai
 ipykernel
 langchain_google_genai
+langchain_community
+pypdf
+faiss-cpu
 
 -e .
 
