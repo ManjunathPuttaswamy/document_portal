@@ -1,5 +1,5 @@
 # Prepare prompt template
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 document_analysis_prompt = ChatPromptTemplate.from_template("""
 You are a highly capable assistant trained to analyze and summarize documents.
