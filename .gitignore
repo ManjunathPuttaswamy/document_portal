@@ -1,4 +1,5 @@
 myenv211
+doc_portal_env
 .env
 document_portal.egg-info
 venv/
