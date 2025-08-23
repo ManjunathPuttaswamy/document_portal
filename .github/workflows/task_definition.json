@@ -1,7 +1,7 @@
 {
   "family": "documentportaltd",
   "networkMode": "awsvpc",
-  "executionRoleArn": "arn:aws:iam::305104953442:user/github-cicd",
+  "executionRoleArn": "arn:aws:iam::305104953442:role/ecsTaskExecutionRole",
   "requiresCompatibilities": ["FARGATE"],
   "cpu": "1024",
   "memory": "8192",
@@ -29,12 +29,12 @@
       "secrets": [
         {
           "name": "GROQ_API_KEY",
-          "valueFrom": "arn:aws:secretsmanager:us-east-1:305104953442:secret:GROQ_API_KEY"
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:305104953442:secret:api-keys-uOWE7K:GROQ_API_KEY"
         },
         
         {
           "name": "GOOGLE_API_KEY",
-          "valueFrom": "arn:aws:secretsmanager:us-east-1:305104953442:secret:GOOGLE_API_KEY"
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:305104953442:secret:api-keys-uOWE7K:GOOGLE_API_KEY"
         }
         
       ],
