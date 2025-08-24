@@ -1,14 +1,16 @@
 name: CI/CD to ECS Fargate
+
 on:
   workflow_run:
-    workflows: ["Run Unit Tests"]
+    workflows: ["Run Unit Tests"]        # must match your CI workflow name
     types: [completed]
+  workflow_dispatch: {}                   # allow manual runs
 
 env:
   AWS_REGION: us-east-1
-  ECR_REPOSITORY: documentportal
-  ECS_SERVICE: document-portal-service
-  ECS_CLUSTER: document-portal-cluster
+  ECR_REPOSITORY: documentportal          # matches CFN repo name
+  ECS_SERVICE: document-portal-service    # matches CFN service name
+  ECS_CLUSTER: document-portal-cluster    # matches CFN cluster name
   ECS_TASK_DEFINITION: .github/workflows/task_definition.json
   CONTAINER_NAME: document-portal-container
 
@@ -16,72 +18,98 @@ permissions:
   id-token: write
   contents: read
 
+concurrency:
+  group: ecs-cicd-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
-  check-status:
+  gate:
+    name: Check CI status
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main') }}
     steps:
-      - run: echo "CI passed on main; building & deploying."
+      - run: echo "Proceeding to build & deploy."
 
   build-and-push:
-    needs: check-status
+    name: Build & Push Docker Image
+    needs: gate
     runs-on: ubuntu-latest
     outputs:
       image: ${{ steps.build-image.outputs.image }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: aws-actions/configure-aws-credentials@v4
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
-      - id: login-ecr
+
+      - name: Login to Amazon ECR
+        id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
-      - id: build-image
+
+      - name: Build and push Docker image
+        id: build-image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          IMAGE_URI=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          set -e
+          IMAGE_URI="$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
           echo "IMAGE_URI=$IMAGE_URI" >> $GITHUB_ENV
-          docker build -t $IMAGE_URI .
-          docker push $IMAGE_URI
-          echo "image=$IMAGE_URI" >> $GITHUB_OUTPUT
+          docker build -t "$IMAGE_URI" .
+          docker push "$IMAGE_URI"
+          echo "image=$IMAGE_URI" >> "$GITHUB_OUTPUT"
 
   deploy:
+    name: Deploy to ECS
     needs: build-and-push
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: aws-actions/configure-aws-credentials@v4
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      # Ensure infra (incl. service) exists
-      - name: Deploy ECS infra (CFN)
+      # Ensure infra (VPC/Subnets/SG/ECR/Cluster/Service/TaskDef skeleton) exists/updates
+      - name: Deploy ECS infra (CloudFormation)
         uses: aws-actions/aws-cloudformation-github-deploy@v1
         with:
           name: document-portal-infra
-          template: infra.yaml
+          template: infrastructure/document-portal-cf.yaml   # <-- your file
           parameter-overrides: |
             ImageUrl=${{ needs.build-and-push.outputs.image }}
           no-fail-on-empty-changeset: "1"
           capabilities: CAPABILITY_NAMED_IAM
 
-      - id: render-task
+      # Render task definition with the freshly pushed image
+      - name: Render task definition
+        id: render-task
         uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
           task-definition: ${{ env.ECS_TASK_DEFINITION }}
           container-name: ${{ env.CONTAINER_NAME }}
           image: ${{ needs.build-and-push.outputs.image }}
 
-      - run: cat ${{ steps.render-task.outputs.task-definition }}
+      - name: Show rendered task (debug)
+        run: cat "${{ steps.render-task.outputs.task-definition }}"
 
-      - uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+      # Update the running service to new task definition
+      - name: Deploy to ECS service
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
         with:
           task-definition: ${{ steps.render-task.outputs.task-definition }}
           service: ${{ env.ECS_SERVICE }}
           cluster: ${{ env.ECS_CLUSTER }}
           wait-for-service-stability: true
+
+      - name: Done
+        run: echo "Deployed to ECS Fargate successfully."
